@@ -96,13 +96,46 @@ def compute_h_uniform_cost(node: Node):
     return 0
 
 
+def compute_h_misplaced_tiles(node: Node):
+    count = 0
+    for i in range(N):
+        for j in range(N):
+            if node.state[i][j] != 0 and node.state[i][j] != GOAL_STATE[i][j]:
+                count += 1
+    return count
+
+def compute_h_manhattan_distance(node: Node):
+    distance = 0
+    for i in range(N):
+        for j in range(N):
+            tile = node.state[i][j]
+            if tile != 0:
+                goal_r = (tile - 1) // N            # We can just compute this instead of searching/hashing the goal state position
+                goal_c = (tile - 1) % N
+                distance += abs(i - goal_r) + abs(j - goal_c)
+    return distance
+
 def queue_function_uniform_cost(nodes: list[tuple[int, int, Node]], new_nodes: list[Node]):
     for node in new_nodes:
         node.h = compute_h_uniform_cost(node)
         node.f = node.g + node.h
         minheap.heappush(nodes, (node.f, next(counter), node))
     return nodes
-        
+
+
+def queue_function_misplaced_tiles(nodes: list[tuple[int, int, Node]], new_nodes: list[Node]):
+    for node in new_nodes:
+        node.h = compute_h_misplaced_tiles(node)
+        node.f = node.g + node.h
+        minheap.heappush(nodes, (node.f, next(counter), node))
+    return nodes
+
+def queue_function_manhattan_distance(nodes: list[tuple[int, int, Node]], new_nodes: list[Node]):
+    for node in new_nodes:
+        node.h = compute_h_manhattan_distance(node)
+        node.f = node.g + node.h
+        minheap.heappush(nodes, (node.f, next(counter), node))
+    return nodes
 
 def expand(node: Node, operators: list[Operator]):
     new_nodes = []
@@ -162,7 +195,10 @@ def main():
     print("Hello")
     ALL_OPERATORS = [Operator.UP, Operator.DOWN, Operator.LEFT, Operator.RIGHT]
     problem = Problem(TEST_STATE, ALL_OPERATORS)
-    solution_node = generic_search(problem, queue_function_uniform_cost)
+    
+    # solution_node = generic_search(problem, queue_function_uniform_cost)
+    # solution_node = generic_search(problem, queue_function_misplaced_tiles)
+    solution_node = generic_search(problem, queue_function_manhattan_distance)
     if solution_node is not None:
         print("Solution found with g(n) =", solution_node.g)
     else:
