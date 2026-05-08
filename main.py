@@ -192,13 +192,40 @@ def generic_search(problem: Problem, queue_function):
 
 
 def main():
-    print("Hello")
     ALL_OPERATORS = [Operator.UP, Operator.DOWN, Operator.LEFT, Operator.RIGHT]
-    problem = Problem(TEST_STATE, ALL_OPERATORS)
-    
-    # solution_node = generic_search(problem, queue_function_uniform_cost)
-    # solution_node = generic_search(problem, queue_function_misplaced_tiles)
-    solution_node = generic_search(problem, queue_function_manhattan_distance)
+
+    test_mode = int(input("Please enter 1 for manual testing and 2 for running all test cases: "))
+    if test_mode == 1:
+         # Custom test case
+        print("Enter the initial state of the 8-puzzle (use 0 for blank tile and whitespace for separators):")
+        custom_state = []
+        for i in range(N):
+            row = list(map(int, input(f"Row {i + 1}: ").split()))
+            custom_state.append(row)
+        problem = Problem(custom_state, ALL_OPERATORS)
+    elif test_mode == 2:
+        print("Running all test cases...")
+        problem = Problem(TEST_STATE, ALL_OPERATORS)
+    else:
+        print("Invalid input. Exiting.")
+        return
+
+    search_type = int(input("Please enter 1 for Uniform Cost Search, 2 for A* with Misplaced Tiles heuristic, and 3 for A* with Manhattan Distance heuristic: "))
+    if search_type == 1:
+        print("Running Uniform Cost Search...")
+        queue_function = queue_function_uniform_cost
+    elif search_type == 2:
+        print("Running A* Search with Misplaced Tiles heuristic...")
+        queue_function = queue_function_misplaced_tiles
+    elif search_type == 3:
+        print("Running A* Search with Manhattan Distance heuristic...")
+        queue_function = queue_function_manhattan_distance
+    else:
+        print("Invalid input. Exiting.")
+        return
+
+    # Run the search algorithm and print the solution
+    solution_node = generic_search(problem, queue_function)
     if solution_node is not None:
         print("Solution found with g(n) =", solution_node.g)
     else:
