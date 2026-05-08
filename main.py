@@ -17,6 +17,21 @@ TEST_STATE = [
 counter = itertools.count()         # For tie-breaking when comparing nodes with the same f(n) value
 repeated_states = set()             # To avoid re-exploring repeated states
 chosen_heuristic_function = None
+search_stats = {}                   # Capture search statistics like nodes expanded, max depth explored, etc.
+
+
+def reset_search_state():
+    """Reset global search helpers before each run."""
+    global counter, repeated_states, search_stats
+    counter = itertools.count()
+    repeated_states = set()
+    search_stats = {
+        "nodes_expanded": 0,
+        "nodes_generated": 0,
+        "repeated_states": 0,
+        "max_depth_explored": 0,
+        "max_queue_size": 0,
+    }
 
 # Classes
 class Node:
@@ -26,6 +41,7 @@ class Node:
         self.h = 0              # H(n) value = cost from goal state based on heuristic function
         self.f = 0              # F(n) value = G(n) + H(n) used for sorting the search nodes by A* algorithm
         self.blank_rc = (2, 2)  # storing blank tile index makes it easier
+        self.parent = None      # Parent node used to reconstruct the solution path
     
     def clone(self):
         """
@@ -38,6 +54,7 @@ class Node:
         new_node.h = self.h
         new_node.f = self.f
         new_node.blank_rc = self.blank_rc
+        new_node.parent = self.parent
         return new_node
 
     def hash(self):
@@ -147,6 +164,8 @@ def queue_function(nodes: list[tuple[int, int, Node]], new_nodes: list[Node]):
         node.h = chosen_heuristic_function(node)    # Compute heuristic cost as per chosen heuristic function
         node.f = node.g + node.h
         minheap.heappush(nodes, (node.f, next(counter), node))  # The ordering is based on the least f(n) value among the nodes
+        search_stats["nodes_generated"] += 1
+    search_stats["max_queue_size"] = max(search_stats["max_queue_size"], len(nodes))
     return nodes
 
 def expand(node: Node, operators: list[Operator]):
@@ -164,10 +183,12 @@ def expand(node: Node, operators: list[Operator]):
         new_node_hash = new_node.hash()
         if new_node_hash in repeated_states:
             # We repeat a state, so skip
+            search_stats["repeated_states"] += 1
             continue
         
         repeated_states.add(new_node_hash)  # Add the new node's hash to the set
         new_node.g = node.g + 1             # g(n) is just the depth of node, so increase by 1 wrt parent node
+        new_node.parent = node              # Keep the tree link for solution traceback
         new_nodes.append(new_node)          # This just holds expanded nodes. Actual insertion happens in the queue function
     return new_nodes
 
@@ -185,6 +206,7 @@ def make_node(state: list[list[int]]):
             if state[i][j] == 0:
                 node.blank_rc = (i, j)
                 break
+    repeated_states.add(node.hash())
     return node
 
 
@@ -208,16 +230,19 @@ def generic_search(problem: Problem, queue_function):
     initial_node.f = initial_node.g + initial_node.h
     
     queue = make_queue(initial_node)
+    search_stats["max_queue_size"] = len(queue)
 
     while True:
         if is_empty(queue):
             return None                 # Indicates failure to find a solution
         
         node = remove_front(queue)
+        search_stats["max_depth_explored"] = max(search_stats["max_depth_explored"], node.g)
         
         if problem.goal_test(node.state):
             return node                 # Goal state found, return the solution node
         
+        search_stats["nodes_expanded"] += 1
         new_nodes = expand(node, problem.operators)
         queue = queue_function(queue, new_nodes)
 
@@ -225,7 +250,7 @@ def generic_search(problem: Problem, queue_function):
 
 def main():
     ALL_OPERATORS = [Operator.UP, Operator.DOWN, Operator.LEFT, Operator.RIGHT]
-    global chosen_heuristic_function
+    global chosen_heuristic_function, search_stats
 
     test_mode = int(input("Please enter 1 for manual testing and 2 for running all test cases: "))
     if test_mode == 1:
@@ -258,11 +283,18 @@ def main():
         return
 
     # Run the search algorithm and print the solution
+    reset_search_state()
     solution_node = generic_search(problem, queue_function)
     if solution_node is not None:
         print("Solution found with g(n) =", solution_node.g)
     else:
         print("No solution found")
+    
+    print("Number of nodes expanded:", search_stats["nodes_expanded"])
+    print("Number of nodes generated:", search_stats["nodes_generated"])
+    print("Number of repeated states:", search_stats["repeated_states"])
+    print("Max depth explored:", search_stats["max_depth_explored"])
+    print("Max queue size:", search_stats["max_queue_size"])
 
 
 main()
