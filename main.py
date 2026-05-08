@@ -15,7 +15,8 @@ TEST_STATE = [
     [7, 8, 6],
 ]
 counter = itertools.count()
-repeated_states = set()    # To keep track of already visited states and avoid cycles in the search
+repeated_states = set()             # To keep track of already visited states and avoid cycles in the search
+chosen_heuristic_function = None
 
 # Classes
 class Node:
@@ -123,24 +124,9 @@ def compute_h_manhattan_distance(node: Node):
                 distance += abs(i - goal_r) + abs(j - goal_c)
     return distance
 
-def queue_function_uniform_cost(nodes: list[tuple[int, int, Node]], new_nodes: list[Node]):
+def queue_function(nodes: list[tuple[int, int, Node]], new_nodes: list[Node]):
     for node in new_nodes:
-        node.h = compute_h_uniform_cost(node)
-        node.f = node.g + node.h
-        minheap.heappush(nodes, (node.f, next(counter), node))
-    return nodes
-
-
-def queue_function_misplaced_tiles(nodes: list[tuple[int, int, Node]], new_nodes: list[Node]):
-    for node in new_nodes:
-        node.h = compute_h_misplaced_tiles(node)
-        node.f = node.g + node.h
-        minheap.heappush(nodes, (node.f, next(counter), node))
-    return nodes
-
-def queue_function_manhattan_distance(nodes: list[tuple[int, int, Node]], new_nodes: list[Node]):
-    for node in new_nodes:
-        node.h = compute_h_manhattan_distance(node)
+        node.h = chosen_heuristic_function(node)
         node.f = node.g + node.h
         minheap.heappush(nodes, (node.f, next(counter), node))
     return nodes
@@ -190,8 +176,9 @@ def remove_front(queue: list[tuple[int, int, Node]]):
 
 def generic_search(problem: Problem, queue_function):
     initial_node = make_node(problem.init_state)
-    initial_node.h = compute_h_uniform_cost(initial_node)
+    initial_node.h = chosen_heuristic_function(initial_node)
     initial_node.f = initial_node.g + initial_node.h
+    
     queue = make_queue(initial_node)
 
     while True:
@@ -210,6 +197,7 @@ def generic_search(problem: Problem, queue_function):
 
 def main():
     ALL_OPERATORS = [Operator.UP, Operator.DOWN, Operator.LEFT, Operator.RIGHT]
+    global chosen_heuristic_function
 
     test_mode = int(input("Please enter 1 for manual testing and 2 for running all test cases: "))
     if test_mode == 1:
@@ -230,13 +218,13 @@ def main():
     search_type = int(input("Please enter 1 for Uniform Cost Search, 2 for A* with Misplaced Tiles heuristic, and 3 for A* with Manhattan Distance heuristic: "))
     if search_type == 1:
         print("Running Uniform Cost Search...")
-        queue_function = queue_function_uniform_cost
+        chosen_heuristic_function = compute_h_uniform_cost
     elif search_type == 2:
         print("Running A* Search with Misplaced Tiles heuristic...")
-        queue_function = queue_function_misplaced_tiles
+        chosen_heuristic_function = compute_h_misplaced_tiles
     elif search_type == 3:
         print("Running A* Search with Manhattan Distance heuristic...")
-        queue_function = queue_function_manhattan_distance
+        chosen_heuristic_function = compute_h_manhattan_distance
     else:
         print("Invalid input. Exiting.")
         return
