@@ -205,6 +205,7 @@ def save_comprehensive_plot(results: list[dict]):
     filename = "comprehensive_results.png"
     algorithms = ["Uniform Cost", "Misplaced Tile", "Manhattan Distance"]
 
+    plt.figure(figsize=(8, 4))
     for algorithm in algorithms:
         algorithm_results = [result for result in results if result["algorithm"] == algorithm]
         depths = [result["depth"] for result in algorithm_results]
