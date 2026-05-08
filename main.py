@@ -14,6 +14,16 @@ TEST_STATE = [
     [0, 4, 5],
     [7, 8, 6],
 ]
+TEST_CASES = [
+    ("Depth 0", 0, [[1, 2, 3], [4, 5, 6], [7, 8, 0]]),
+    ("Depth 1", 1, [[1, 2, 3], [4, 5, 0], [7, 8, 6]]),
+    ("Depth 2", 2, [[1, 2, 0], [4, 5, 3], [7, 8, 6]]),
+    ("Depth 4", 4, [[1, 5, 2], [4, 0, 3], [7, 8, 6]]),
+    ("Depth 8", 8, [[0, 5, 2], [1, 8, 3], [4, 7, 6]]),
+    ("Depth 16", 16, [[8, 7, 2], [5, 0, 3], [1, 4, 6]]),
+    ("Depth 24", 24, [[8, 4, 7], [5, 6, 2], [0, 1, 3]]),
+    ("Depth 31", 31, [[8, 6, 7], [2, 5, 4], [3, 0, 1]]),
+]
 counter = itertools.count()         # For tie-breaking when comparing nodes with the same f(n) value
 repeated_states = set()             # To avoid re-exploring repeated states
 chosen_heuristic_function = None
@@ -221,10 +231,81 @@ def remove_front(queue: list[tuple[int, int, Node]]):
     return element[2]                   # our element is a tuple of (f(n), tie-breaker, node), so, return the node only
 
 
+def print_search_stats():
+    """Print stats from the latest run."""
+    print("Number of nodes expanded:", search_stats["nodes_expanded"])
+    print("Number of nodes generated:", search_stats["nodes_generated"])
+    print("Number of repeated states:", search_stats["repeated_states"])
+    print("Max depth explored:", search_stats["max_depth_explored"])
+    print("Max queue size:", search_stats["max_queue_size"])
+
+
+def save_comprehensive_plot(results: list[dict]):
+    """Save a simple line chart for nodes expanded by heuristic type."""
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("matplotlib is not installed, so skipping plot generation.")
+        return
+
+    filename = "comprehensive_results.png"
+    algorithms = ["Uniform Cost", "Misplaced Tile", "Manhattan Distance"]
+
+    for algorithm in algorithms:
+        algorithm_results = [result for result in results if result["algorithm"] == algorithm]
+        depths = [result["depth"] for result in algorithm_results]
+        nodes_expanded = [result["nodes_expanded"] for result in algorithm_results]
+        plt.plot(depths, nodes_expanded, marker="o", label=algorithm)
+
+    plt.title("8-Puzzle Search Comparison")
+    plt.xlabel("Solution Depth")
+    plt.ylabel("Nodes Expanded")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(filename)
+    plt.close()
+    print("Plot saved to", filename)
+
+
+def run_comprehensive_mode(operators: list[Operator]):
+    """Run every test case against every algorithm."""
+    global chosen_heuristic_function
+    algorithms = [
+        ("Uniform Cost", compute_h_uniform_cost),
+        ("Misplaced Tile", compute_h_misplaced_tiles),
+        ("Manhattan Distance", compute_h_manhattan_distance),
+    ]
+    results = []
+
+    print("Running comprehensive mode...")
+    print(f'{"Puzzle":<10} {"Algorithm":<20} {"Sol. Depth":<12} {"Nodes Expanded":<18} {"Nodes Repeated":<18} {"Max Queue Size":<16}')
+    for test_name, expected_depth, initial_state in TEST_CASES:
+        for algorithm_name, heuristic_function in algorithms:
+            chosen_heuristic_function = heuristic_function
+            problem = Problem(initial_state, operators)
+            solution_node = generic_search(problem, queue_function)
+            solution_depth = solution_node.g if solution_node is not None else -1
+            result = {
+                "test_name": test_name,
+                "depth": expected_depth,
+                "algorithm": algorithm_name,
+                "solution_depth": solution_depth,
+                "nodes_expanded": search_stats["nodes_expanded"],
+                "repeated_states": search_stats["repeated_states"],
+                "max_queue_size": search_stats["max_queue_size"],
+            }
+            results.append(result)
+            print(f'{test_name:<10} {algorithm_name:<20} {solution_depth:<12} {search_stats["nodes_expanded"]:<18} {search_stats["repeated_states"]:<18} {search_stats["max_queue_size"]:<16}')
+
+    save_comprehensive_plot(results)
+
+
 # ############################# THE GENERIC SEARCH ALGORITHM #############################
 
 def generic_search(problem: Problem, queue_function):
     """Implements the generic search algorithm for the 8-puzzle problem."""
+    reset_search_state()
+
     initial_node = make_node(problem.init_state)
     initial_node.h = chosen_heuristic_function(initial_node)
     initial_node.f = initial_node.g + initial_node.h
@@ -252,7 +333,7 @@ def main():
     ALL_OPERATORS = [Operator.UP, Operator.DOWN, Operator.LEFT, Operator.RIGHT]
     global chosen_heuristic_function, search_stats
 
-    test_mode = int(input("Please enter 1 for manual testing and 2 for running all test cases: "))
+    test_mode = int(input("Please enter 1 for manual testing, 2 for running the default test case, and 3 for comprehensive mode: "))
     if test_mode == 1:
          # Custom test case
         print("Enter the initial state of the 8-puzzle (use 0 for blank tile and whitespace for separators):")
@@ -262,8 +343,11 @@ def main():
             custom_state.append(row)
         problem = Problem(custom_state, ALL_OPERATORS)
     elif test_mode == 2:
-        print("Running all test cases...")
+        print("Running default test case...")
         problem = Problem(TEST_STATE, ALL_OPERATORS)
+    elif test_mode == 3:
+        run_comprehensive_mode(ALL_OPERATORS)
+        return
     else:
         print("Invalid input. Exiting.")
         return
@@ -283,18 +367,13 @@ def main():
         return
 
     # Run the search algorithm and print the solution
-    reset_search_state()
     solution_node = generic_search(problem, queue_function)
     if solution_node is not None:
         print("Solution found with g(n) =", solution_node.g)
     else:
         print("No solution found")
     
-    print("Number of nodes expanded:", search_stats["nodes_expanded"])
-    print("Number of nodes generated:", search_stats["nodes_generated"])
-    print("Number of repeated states:", search_stats["repeated_states"])
-    print("Max depth explored:", search_stats["max_depth_explored"])
-    print("Max queue size:", search_stats["max_queue_size"])
+    print_search_stats()
 
 
 main()
