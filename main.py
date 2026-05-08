@@ -15,6 +15,7 @@ TEST_STATE = [
     [7, 8, 6],
 ]
 counter = itertools.count()
+repeated_states = set()    # To keep track of already visited states and avoid cycles in the search
 
 # Classes
 class Node:
@@ -33,6 +34,13 @@ class Node:
         new_node.f = self.f
         new_node.blank_rc = self.blank_rc
         return new_node
+
+    def hash(self):
+        """
+            Simple hash key generator.
+            Example: For state [[1, 2, 3], [0, 4, 5], [7, 8, 6]], the hash would be "1 2 3,0 4 5,7 8 6"
+        """
+        return ",".join([" ".join(map(str, row)) for row in self.state])
 
 class Problem:
     def __init__(self, initial_state, operators):
@@ -142,9 +150,18 @@ def expand(node: Node, operators: list[Operator]):
     for operator in operators:
         node_copy = node.clone()            # Create a copy of the current node
         new_node = operator.apply(node_copy)
-        if new_node is not None:
-            new_node.g = node.g + 1         # g(n) is just the depth of node, so increase by 1 wrt parent node
-            new_nodes.append(new_node)      # This just holds expanded nodes. Actual insertion happens in the queue function
+
+        if new_node is None:
+            continue
+
+        # Repetition check
+        new_node_hash = new_node.hash()
+        if new_node_hash in repeated_states:
+            continue
+        
+        repeated_states.add(new_node_hash)  # Add the new node's hash to the set
+        new_node.g = node.g + 1             # g(n) is just the depth of node, so increase by 1 wrt parent node
+        new_nodes.append(new_node)          # This just holds expanded nodes. Actual insertion happens in the queue function
     return new_nodes
 
 
