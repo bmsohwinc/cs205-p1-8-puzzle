@@ -23,11 +23,14 @@ TEST_CASES = [
     ("Depth 16", 16, [[8, 7, 2], [5, 0, 3], [1, 4, 6]]),
     ("Depth 24", 24, [[8, 4, 7], [5, 6, 2], [0, 1, 3]]),
     ("Depth 31", 31, [[8, 6, 7], [2, 5, 4], [3, 0, 1]]),
+    ("Depth None", "None", [[0, 1, 2], [3, 5, 4], [7, 8, 6]]),
 ]
 counter = itertools.count()         # For tie-breaking when comparing nodes with the same f(n) value
 repeated_states = set()             # To avoid re-exploring repeated states
 chosen_heuristic_function = None
 search_stats = {}                   # Capture search statistics like nodes expanded, max depth explored, etc.
+TRACE_LOG_FILE = "search_trace.log"
+trace_logging_enabled = True
 
 
 def reset_search_state():
@@ -134,6 +137,90 @@ class Operator(Enum):
         node.blank_rc = new_blank_rc
         return node
 
+# ############################# TRACE LOGGING AND STATS UTILITIES #############################
+
+def init_trace_log():
+    """Start a fresh trace log for this program run."""
+    with open(TRACE_LOG_FILE, "w") as file:
+        file.write("8-Puzzle Search Trace Log\n")
+        file.write("=========================\n\n")
+
+
+def write_trace_log(message: str):
+    """Append one line to the trace log."""
+    with open(TRACE_LOG_FILE, "a") as file:
+        file.write(message + "\n")
+
+
+def write_state_to_trace(state: list[list[int]]):
+    """Append a puzzle state to the trace log."""
+    for row in state:
+        write_trace_log(str(row))
+
+
+def get_solution_path(node):
+    """Returns the solution path from the initial node to the given node."""
+    path = []
+    while node is not None:
+        path.append(node)
+        node = node.parent
+    return path[::-1]
+
+
+def print_search_stats():
+    """Print stats from the latest run."""
+    print("Number of nodes expanded:", search_stats["nodes_expanded"])
+    print("Number of nodes generated:", search_stats["nodes_generated"])
+    print("Number of repeated states:", search_stats["repeated_states"])
+    print("Max depth explored:", search_stats["max_depth_explored"])
+    print("Max queue size:", search_stats["max_queue_size"])
+
+
+def write_node_to_trace(node: Node, message: str):
+    """Append one expanded node to the trace log."""
+    write_trace_log(message)
+    write_trace_log("g(n) = " + str(node.g) + ", h(n) = " + str(node.h) + ", f(n) = " + str(node.f))
+    write_state_to_trace(node.state)
+    write_trace_log("")
+
+
+def write_solution_path_to_trace(solution_node: Node):
+    """Append the final solution path to the trace log."""
+    path = get_solution_path(solution_node)
+    write_trace_log("Solution path:")
+    for step, node in enumerate(path):
+        write_trace_log("Step " + str(step) + ": g(n) = " + str(node.g) + ", h(n) = " + str(node.h))
+        write_state_to_trace(node.state)
+        write_trace_log("")
+
+
+def save_comprehensive_plot(results: list[dict]):
+    """Save a simple line chart for nodes expanded by heuristic type."""
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("matplotlib is not installed, so skipping plot generation.")
+        return
+
+    filename = "comprehensive_results.png"
+    algorithms = ["Uniform Cost", "Misplaced Tile", "Manhattan Distance"]
+
+    for algorithm in algorithms:
+        algorithm_results = [result for result in results if result["algorithm"] == algorithm]
+        depths = [result["depth"] for result in algorithm_results]
+        nodes_expanded = [result["nodes_expanded"] for result in algorithm_results]
+        plt.plot(depths, nodes_expanded, marker="o", label=algorithm)
+
+    plt.title("8-Puzzle Search Comparison")
+    plt.xlabel("Solution Depth")
+    plt.ylabel("Nodes Expanded")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(filename)
+    plt.close()
+    print("Plot saved to", filename)
+
+# ############################# HEURISTIC FUNCTIONS AND QUEUE FUNCTION #############################
 
 def compute_h_uniform_cost(node: Node):
     """In Uniform Cost Search, heuristic cost is 0."""
@@ -231,53 +318,22 @@ def remove_front(queue: list[tuple[int, int, Node]]):
     return element[2]                   # our element is a tuple of (f(n), tie-breaker, node), so, return the node only
 
 
-def print_search_stats():
-    """Print stats from the latest run."""
-    print("Number of nodes expanded:", search_stats["nodes_expanded"])
-    print("Number of nodes generated:", search_stats["nodes_generated"])
-    print("Number of repeated states:", search_stats["repeated_states"])
-    print("Max depth explored:", search_stats["max_depth_explored"])
-    print("Max queue size:", search_stats["max_queue_size"])
-
-
-def save_comprehensive_plot(results: list[dict]):
-    """Save a simple line chart for nodes expanded by heuristic type."""
-    try:
-        import matplotlib.pyplot as plt
-    except ImportError:
-        print("matplotlib is not installed, so skipping plot generation.")
-        return
-
-    filename = "comprehensive_results.png"
-    algorithms = ["Uniform Cost", "Misplaced Tile", "Manhattan Distance"]
-
-    for algorithm in algorithms:
-        algorithm_results = [result for result in results if result["algorithm"] == algorithm]
-        depths = [result["depth"] for result in algorithm_results]
-        nodes_expanded = [result["nodes_expanded"] for result in algorithm_results]
-        plt.plot(depths, nodes_expanded, marker="o", label=algorithm)
-
-    plt.title("8-Puzzle Search Comparison")
-    plt.xlabel("Solution Depth")
-    plt.ylabel("Nodes Expanded")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(filename)
-    plt.close()
-    print("Plot saved to", filename)
-
+# ############################# COMPREHENSIVE MODE #############################
 
 def run_comprehensive_mode(operators: list[Operator]):
     """Run every test case against every algorithm."""
-    global chosen_heuristic_function
+    global chosen_heuristic_function, trace_logging_enabled
     algorithms = [
         ("Uniform Cost", compute_h_uniform_cost),
         ("Misplaced Tile", compute_h_misplaced_tiles),
         ("Manhattan Distance", compute_h_manhattan_distance),
     ]
     results = []
+    old_trace_logging_enabled = trace_logging_enabled
+    trace_logging_enabled = False
 
     print("Running comprehensive mode...")
+    write_trace_log("Comprehensive mode summary:")
     print(f'{"Puzzle":<10} {"Algorithm":<20} {"Sol. Depth":<12} {"Nodes Expanded":<18} {"Nodes Repeated":<18} {"Max Queue Size":<16}')
     for test_name, expected_depth, initial_state in TEST_CASES:
         for algorithm_name, heuristic_function in algorithms:
@@ -296,8 +352,17 @@ def run_comprehensive_mode(operators: list[Operator]):
             }
             results.append(result)
             print(f'{test_name:<10} {algorithm_name:<20} {solution_depth:<12} {search_stats["nodes_expanded"]:<18} {search_stats["repeated_states"]:<18} {search_stats["max_queue_size"]:<16}')
+            write_trace_log(
+                test_name + " | " + algorithm_name +
+                " | solution depth: " + str(solution_depth) +
+                " | nodes expanded: " + str(search_stats["nodes_expanded"]) +
+                " | repeated states: " + str(search_stats["repeated_states"]) +
+                " | max queue size: " + str(search_stats["max_queue_size"])
+            )
 
+    trace_logging_enabled = old_trace_logging_enabled
     save_comprehensive_plot(results)
+    print("Trace log saved to", TRACE_LOG_FILE)
 
 
 # ############################# THE GENERIC SEARCH ALGORITHM #############################
@@ -319,6 +384,8 @@ def generic_search(problem: Problem, queue_function):
         
         node = remove_front(queue)
         search_stats["max_depth_explored"] = max(search_stats["max_depth_explored"], node.g)
+        if trace_logging_enabled:
+            write_node_to_trace(node, "The best state to expand is:")
         
         if problem.goal_test(node.state):
             return node                 # Goal state found, return the solution node
@@ -332,6 +399,7 @@ def generic_search(problem: Problem, queue_function):
 def main():
     ALL_OPERATORS = [Operator.UP, Operator.DOWN, Operator.LEFT, Operator.RIGHT]
     global chosen_heuristic_function, search_stats
+    init_trace_log()
 
     test_mode = int(input("Please enter 1 for manual testing, 2 for running the default test case, and 3 for comprehensive mode: "))
     if test_mode == 1:
@@ -370,10 +438,17 @@ def main():
     solution_node = generic_search(problem, queue_function)
     if solution_node is not None:
         print("Solution found with g(n) =", solution_node.g)
+        write_trace_log("===================================================")
+        write_trace_log("Goal state found.")
+        write_trace_log("===================================================")
+        write_trace_log("")
+        write_solution_path_to_trace(solution_node)
     else:
         print("No solution found")
+        write_trace_log("No solution found.")
     
     print_search_stats()
+    print("Trace log saved to", TRACE_LOG_FILE)
 
 
 main()
