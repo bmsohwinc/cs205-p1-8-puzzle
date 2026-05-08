@@ -14,8 +14,8 @@ TEST_STATE = [
     [0, 4, 5],
     [7, 8, 6],
 ]
-counter = itertools.count()
-repeated_states = set()             # To keep track of already visited states and avoid cycles in the search
+counter = itertools.count()         # For tie-breaking when comparing nodes with the same f(n) value
+repeated_states = set()             # To avoid re-exploring repeated states
 chosen_heuristic_function = None
 
 # Classes
@@ -28,6 +28,10 @@ class Node:
         self.blank_rc = (2, 2)  # storing blank tile index makes it easier
     
     def clone(self):
+        """
+            Util to create a deep copy of the node. 
+            Useful when applying operators to create new nodes without modifying the original node.
+        """
         new_node = Node()
         new_node.state = [row[:] for row in self.state]
         new_node.g = self.g
@@ -38,8 +42,8 @@ class Node:
 
     def hash(self):
         """
-            Simple hash key generator.
-            Example: For state [[1, 2, 3], [0, 4, 5], [7, 8, 6]], the hash would be "1 2 3,0 4 5,7 8 6"
+            Simple hash key generator for the node state.
+            Example: For state [[1, 2, 3], [0, 4, 5], [7, 8, 6]], the hash will be "1 2 3,0 4 5,7 8 6"
         """
         return ",".join([" ".join(map(str, row)) for row in self.state])
 
@@ -49,6 +53,8 @@ class Problem:
         self.operators = operators
     
     def goal_test(self, node_state: list[list[int]]):
+        """Checks if the given node state matches the goal state."""
+        # A single mismatch concludes that node is not yet the goal state.
         for i in range(N):
             for j in range(N):
                 if node_state[i][j] != GOAL_STATE[i][j]:
@@ -62,6 +68,7 @@ class Operator(Enum):
     RIGHT = 4
 
     def apply(self, node: Node):
+        """Applies the operator to the given node and returns a new node with the updated state."""
         if node is None:
             return None
         
@@ -102,10 +109,12 @@ class Operator(Enum):
 
 
 def compute_h_uniform_cost(node: Node):
+    """In Uniform Cost Search, heuristic cost is 0."""
     return 0
 
 
 def compute_h_misplaced_tiles(node: Node):
+    """We just check the number of misplaced tiles compared to the goal state, except the blank tile."""
     count = 0
     for i in range(N):
         for j in range(N):
@@ -114,35 +123,47 @@ def compute_h_misplaced_tiles(node: Node):
     return count
 
 def compute_h_manhattan_distance(node: Node):
+    """We compute and accumulate the Manhattan distance of each tile from its goal position, except the blank tile."""
     distance = 0
     for i in range(N):
         for j in range(N):
             tile = node.state[i][j]
             if tile != 0:
-                goal_r = (tile - 1) // N            # We can just compute this instead of searching/hashing the goal state position
+                goal_r = (tile - 1) // N            # We just compute this instead of searching/hashing the goal state position
                 goal_c = (tile - 1) % N
                 distance += abs(i - goal_r) + abs(j - goal_c)
     return distance
 
 def queue_function(nodes: list[tuple[int, int, Node]], new_nodes: list[Node]):
+    """
+        For each new node explored, we compute the heuristic cost h(n),
+          and insert it into the priority queue (min-heap) based on the least f(n) value.
+        
+        f(n) is sum of g(n) and h(n), where,
+          g(n) is the cost from the initial state to the current node (which is just the depth of the node in our case), and
+          h(n) is the heuristic cost from the current node to the goal state.
+    """
     for node in new_nodes:
-        node.h = chosen_heuristic_function(node)
+        node.h = chosen_heuristic_function(node)    # Compute heuristic cost as per chosen heuristic function
         node.f = node.g + node.h
-        minheap.heappush(nodes, (node.f, next(counter), node))
+        minheap.heappush(nodes, (node.f, next(counter), node))  # The ordering is based on the least f(n) value among the nodes
     return nodes
 
 def expand(node: Node, operators: list[Operator]):
+    """Expands the given node by applying the given operators and returns a list of new nodes."""
     new_nodes = []
     for operator in operators:
-        node_copy = node.clone()            # Create a copy of the current node
-        new_node = operator.apply(node_copy)
+        node_copy = node.clone()                # Create a copy of the current node
+        new_node = operator.apply(node_copy)    # Apply operator
 
         if new_node is None:
+            # Invalid operation in this state, so skip
             continue
 
         # Repetition check
         new_node_hash = new_node.hash()
         if new_node_hash in repeated_states:
+            # We repeat a state, so skip
             continue
         
         repeated_states.add(new_node_hash)  # Add the new node's hash to the set
@@ -152,9 +173,11 @@ def expand(node: Node, operators: list[Operator]):
 
 
 def make_queue(node: Node):
+    """Initializes the queue with the initial node."""
     return [(node.f, next(counter), node)]
 
 def make_node(state: list[list[int]]):
+    """Creates a new node with the given state. Also stores blank tile position."""
     node = Node()
     node.state = state
     for i in range(N):
@@ -166,15 +189,20 @@ def make_node(state: list[list[int]]):
 
 
 def is_empty(queue: list[tuple[int, int, Node]]):
+    """Simple util to check if the queue is empty."""
     return len(queue) == 0
 
 
 def remove_front(queue: list[tuple[int, int, Node]]):
+    """Pops and returns node with the least f(n) value from the queue."""
     element = minheap.heappop(queue)
     return element[2]                   # our element is a tuple of (f(n), tie-breaker, node), so, return the node only
 
 
+# ############################# THE GENERIC SEARCH ALGORITHM #############################
+
 def generic_search(problem: Problem, queue_function):
+    """Implements the generic search algorithm for the 8-puzzle problem."""
     initial_node = make_node(problem.init_state)
     initial_node.h = chosen_heuristic_function(initial_node)
     initial_node.f = initial_node.g + initial_node.h
@@ -183,17 +211,17 @@ def generic_search(problem: Problem, queue_function):
 
     while True:
         if is_empty(queue):
-            return None                # Indicates failure to find a solution
+            return None                 # Indicates failure to find a solution
         
         node = remove_front(queue)
-        # print("---\n", node, "\n---\n", node.state, "\n---\n")
         
         if problem.goal_test(node.state):
-            return node
+            return node                 # Goal state found, return the solution node
         
         new_nodes = expand(node, problem.operators)
         queue = queue_function(queue, new_nodes)
 
+# ########################################################################################
 
 def main():
     ALL_OPERATORS = [Operator.UP, Operator.DOWN, Operator.LEFT, Operator.RIGHT]
